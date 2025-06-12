@@ -94,7 +94,6 @@ while running:
                 right_pressed = True
                 last_key_pressed = "right"
 
-
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_LEFT:
                 left_pressed = False
