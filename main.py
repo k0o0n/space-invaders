@@ -67,7 +67,7 @@ class Player:
 class Enemy:
     def __init__(self):
         self.image = enemy_img
-        self.speed = 0.6
+        self.speed = 0.3
         self.x = random.randint(0, SCREEN_WIDTH - ENEMY_SIZE)
         self.y = random.randint(50, 150)
         self.x_change = self.speed * random.choice([1, -1])
