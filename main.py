@@ -1,124 +1,210 @@
 import pygame
 import random
+import math
 
 # Initialize pygame
 pygame.init()
 
-# Screen settings
+# Constants
 SCREEN_WIDTH = 900
 SCREEN_HEIGHT = 600
-PLAYER_WIDTH = 64
-ENEMY_WIDTH = 64
+PLAYER_SIZE = 64
+ENEMY_SIZE = 64
+BULLET_SIZE = 32
+
+# Screen setup
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Space Invaders")
-icon = pygame.image.load('media/ufo.png')
+icon = pygame.image.load("media/ufo.png")
 pygame.display.set_icon(icon)
 
-# Load images
-background = pygame.image.load('media/background.png')
-playerImg = pygame.image.load('media/player.png')
-enemyImg = pygame.image.load('media/enemy.png')
+# Load assets
+background = pygame.image.load("media/background.png")
+player_img = pygame.image.load("media/player.png")
+enemy_img = pygame.image.load("media/enemy.png")
+bullet_img = pygame.image.load("media/bullet.png")
 
+# Fonts
+font_game_over = pygame.font.SysFont("comicsansms", 64)
+font_restart = pygame.font.SysFont("comicsansms", 32)
+font_score = pygame.font.SysFont("comicsansms", 28)
+
+
+# Clock
 clock = pygame.time.Clock()
 
+# Game States
+PLAYING = "playing"
+GAME_OVER = "game_over"
 
-# --------------------- Player Class ---------------------
+
 class Player:
-    def __init__(self, image, x, y, speed):
-        self.image = image
-        self.x = x
-        self.y = y
-        self.speed = speed
-        self.move_dir = 0
+    def __init__(self):
+        self.image = player_img
+        self.x = (SCREEN_WIDTH - PLAYER_SIZE) // 2
+        self.y = 480
+        self.speed = 0.3
+        self.x_change = 0
+        self.left_pressed = False
+        self.right_pressed = False
+        self.last_key = None
 
     def update(self, dt):
-        self.x += self.speed * self.move_dir * dt / 1000.0
-        self.x = max(0, min(self.x, SCREEN_WIDTH - PLAYER_WIDTH))
+        if self.last_key == "left" and self.left_pressed:
+            self.x_change = -self.speed * dt
+        elif self.last_key == "right" and self.right_pressed:
+            self.x_change = self.speed * dt
+        else:
+            self.x_change = 0
 
-    def draw(self, surface):
-        surface.blit(self.image, (self.x, self.y))
+        self.x += self.x_change
+        self.x = max(0, min(SCREEN_WIDTH - PLAYER_SIZE, self.x))
+
+    def draw(self):
+        screen.blit(self.image, (self.x, self.y))
 
 
-# --------------------- Enemy Class ---------------------
 class Enemy:
-    def __init__(self, image, x, y, speed, y_step):
-        self.image = image
-        self.x = x
-        self.y = y
-        self.speed = speed
-        self.y_step = y_step
-        self.direction = random.choice([-1, 1])
+    def __init__(self):
+        self.image = enemy_img
+        self.speed = 0.6
+        self.x = random.randint(0, SCREEN_WIDTH - ENEMY_SIZE)
+        self.y = random.randint(50, 150)
+        self.x_change = self.speed * random.choice([1, -1])
+        self.y_change = 40
 
     def update(self, dt):
-        self.x += self.direction * self.speed * dt / 1000.0
-        if self.x <= 0:
-            self.x = 0
-            self.direction = 1
-            self.y += self.y_step
-        elif self.x >= SCREEN_WIDTH - ENEMY_WIDTH:
-            self.x = SCREEN_WIDTH - ENEMY_WIDTH
-            self.direction = -1
-            self.y += self.y_step
+        self.x += self.x_change * dt
+        if self.x <= 0 or self.x >= SCREEN_WIDTH - ENEMY_SIZE:
+            self.x_change *= -1
+            self.y += self.y_change
 
-    def draw(self, surface):
-        surface.blit(self.image, (self.x, self.y))
+    def draw(self):
+        screen.blit(self.image, (self.x, self.y))
+
+    def reset(self):
+        self.__init__()
 
 
-# Game entities
-player = Player(playerImg, (SCREEN_WIDTH - PLAYER_WIDTH) // 2, 480, 300)
-enemy = Enemy(enemyImg, random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH), random.randint(50, 150), 200, 40)
+class Bullet:
+    def __init__(self):
+        self.image = bullet_img
+        self.speed = 1
+        self.x = 0
+        self.y = 0
+        self.state = "ready"
 
-# Input state tracking
-left_pressed = False
-right_pressed = False
-last_key_pressed = None
+    def fire(self, player_x, player_y):
+        self.x = player_x + (PLAYER_SIZE - BULLET_SIZE) // 2
+        self.y = player_y
+        self.state = "fire"
 
-# --------------------- Game Loop ---------------------
+    def update(self, dt):
+        if self.state == "fire":
+            self.y -= self.speed * dt
+            if self.y < 0:
+                self.state = "ready"
+
+    def draw(self):
+        if self.state == "fire":
+            screen.blit(self.image, (self.x, self.y))
+
+
+class Game:
+    def __init__(self):
+        self.player = Player()
+        self.enemy = Enemy()
+        self.bullet = Bullet()
+        self.state = PLAYING
+        self.score = 0
+
+    def check_collision(self, obj1_x, obj1_y, obj2_x, obj2_y, threshold):
+        distance = math.sqrt((obj1_x - obj2_x)**2 + (obj1_y - obj2_y)**2)
+        return distance < threshold
+
+    def update(self, dt):
+        if self.state == PLAYING:
+            self.player.update(dt)
+            self.enemy.update(dt)
+            self.bullet.update(dt)
+
+            if self.bullet.state == "fire" and self.check_collision(
+                self.bullet.x + BULLET_SIZE // 2,
+                self.bullet.y + BULLET_SIZE // 2,
+                self.enemy.x + ENEMY_SIZE // 2,
+                self.enemy.y + ENEMY_SIZE // 2,
+                27):
+                self.bullet.state = "ready"
+                self.enemy.reset()
+                self.score += 1
+
+            if self.check_collision(
+                self.player.x + PLAYER_SIZE // 2,
+                self.player.y + PLAYER_SIZE // 2,
+                self.enemy.x + ENEMY_SIZE // 2,
+                self.enemy.y + ENEMY_SIZE // 2,
+                40):
+                self.state = GAME_OVER
+
+    def draw(self):
+        if self.state == PLAYING:
+            screen.blit(background, (0, 0))
+            self.player.draw()
+            self.enemy.draw()
+            self.bullet.draw()
+            self.draw_score()
+        elif self.state == GAME_OVER:
+            screen.fill((50, 0, 0))
+            game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
+            restart_text = font_restart.render("Press R to Restart", True, (255, 255, 255))
+            screen.blit(game_over_text, ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200))
+            screen.blit(restart_text, ((SCREEN_WIDTH - restart_text.get_width()) // 2, 300))
+
+    def draw_score(self):
+        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 255))
+        screen.blit(score_text, (10, 10))
+
+    def reset(self):
+        self.__init__()
+
+
+# Main game loop
+game = Game()
 running = True
 while running:
     dt = clock.tick(60)
-
-    # Background
-    screen.fill((0, 0, 0))
-    screen.blit(background, (0, 0))
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                left_pressed = True
-                last_key_pressed = "left"
-            if event.key == pygame.K_RIGHT:
-                right_pressed = True
-                last_key_pressed = "right"
+        if game.state == PLAYING:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    game.player.left_pressed = True
+                    game.player.last_key = "left"
+                elif event.key == pygame.K_RIGHT:
+                    game.player.right_pressed = True
+                    game.player.last_key = "right"
+                elif event.key == pygame.K_SPACE and game.bullet.state == "ready":
+                    game.bullet.fire(game.player.x, game.player.y)
 
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_LEFT:
-                left_pressed = False
-                if last_key_pressed == "left":
-                    last_key_pressed = "right" if right_pressed else None
-            if event.key == pygame.K_RIGHT:
-                right_pressed = False
-                if last_key_pressed == "right":
-                    last_key_pressed = "left" if left_pressed else None
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT:
+                    game.player.left_pressed = False
+                    if game.player.last_key == "left":
+                        game.player.last_key = "right" if game.player.right_pressed else None
+                elif event.key == pygame.K_RIGHT:
+                    game.player.right_pressed = False
+                    if game.player.last_key == "right":
+                        game.player.last_key = "left" if game.player.left_pressed else None
 
-    # Movement logic with priority to most recent key press
-    if last_key_pressed == "left" and left_pressed:
-        player.move_dir = -1
-    elif last_key_pressed == "right" and right_pressed:
-        player.move_dir = 1
-    else:
-        player.move_dir = 0
+        elif game.state == GAME_OVER:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                game.reset()
 
-    # Update and draw
-    player.update(dt)
-    enemy.update(dt)
-    player.draw(screen)
-    enemy.draw(screen)
-
+    game.update(dt)
+    game.draw()
     pygame.display.update()
 
-# Clean exit
 pygame.quit()
