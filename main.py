@@ -7,7 +7,7 @@ pygame.init()
 
 # Music
 my_sound = pygame.mixer.Sound('media/music.mp3')
-my_sound. play()
+my_sound. play(-1)
 
 # Constants
 SCREEN_WIDTH = 900
