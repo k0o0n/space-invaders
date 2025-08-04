@@ -29,13 +29,13 @@ font_game_over = pygame.font.SysFont("comicsansms", 64)
 font_restart = pygame.font.SysFont("comicsansms", 32)
 font_score = pygame.font.SysFont("comicsansms", 28)
 
-
 # Clock
 clock = pygame.time.Clock()
 
 # Game States
 PLAYING = "playing"
 GAME_OVER = "game_over"
+PAUSED = "paused"
 
 
 class Player:
@@ -43,7 +43,7 @@ class Player:
         self.image = player_img
         self.x = (SCREEN_WIDTH - PLAYER_SIZE) // 2
         self.y = 480
-        self.speed = 0.3
+        self.speed = 0.4
         self.x_change = 0
         self.left_pressed = False
         self.right_pressed = False
@@ -89,7 +89,7 @@ class Enemy:
 class Bullet:
     def __init__(self):
         self.image = bullet_img
-        self.speed = 1
+        self.speed = 2
         self.x = 0
         self.y = 0
         self.state = "ready"
@@ -113,8 +113,8 @@ class Bullet:
 class Game:
     def __init__(self):
         self.player = Player()
-        self.enemy = Enemy()
         self.bullet = Bullet()
+        self.enemies = [Enemy(), Enemy()]
         self.state = PLAYING
         self.score = 0
 
@@ -125,44 +125,77 @@ class Game:
     def update(self, dt):
         if self.state == PLAYING:
             self.player.update(dt)
-            self.enemy.update(dt)
             self.bullet.update(dt)
+            for enemy in self.enemies:
+                enemy.update(dt)
 
-            if self.bullet.state == "fire" and self.check_collision(
-                self.bullet.x + BULLET_SIZE // 2,
-                self.bullet.y + BULLET_SIZE // 2,
-                self.enemy.x + ENEMY_SIZE // 2,
-                self.enemy.y + ENEMY_SIZE // 2,
-                27):
-                self.bullet.state = "ready"
-                self.enemy.reset()
-                self.score += 1
+            for enemy in self.enemies:
+                if self.bullet.state == "fire" and self.check_collision(
+                    self.bullet.x + BULLET_SIZE // 2,
+                    self.bullet.y + BULLET_SIZE // 2,
+                    enemy.x + ENEMY_SIZE // 2,
+                    enemy.y + ENEMY_SIZE // 2,
+                    27):
+                    self.bullet.state = "ready"
+                    enemy.reset()
+                    self.score += 1
+                    break
 
-            if self.check_collision(
-                self.player.x + PLAYER_SIZE // 2,
-                self.player.y + PLAYER_SIZE // 2,
-                self.enemy.x + ENEMY_SIZE // 2,
-                self.enemy.y + ENEMY_SIZE // 2,
-                40):
-                self.state = GAME_OVER
+            for enemy in self.enemies:
+                if self.check_collision(
+                    self.player.x + PLAYER_SIZE // 2,
+                    self.player.y + PLAYER_SIZE // 2,
+                    enemy.x + ENEMY_SIZE // 2,
+                    enemy.y + ENEMY_SIZE // 2,
+                    40):
+                    self.state = GAME_OVER
+                    break
+
+    def draw_background(self):
+        screen.blit(background, (0, 0))
+
+    def draw_restart_text(self, pos):
+        x, y = pos
+        restart_text = font_restart.render("Press R to Restart", True, (255, 255, 0))
+        screen.blit(restart_text, (x, y))
+
+    def draw_score(self):
+        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 0))
+        screen.blit(score_text, (10, 10))
+
+    def draw_game_over_text(self):
+        game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
+        screen.blit(game_over_text, ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200))
+
+    def draw_paused_text(self):
+        pause_text = font_game_over.render("PAUSED", True, (255, 255, 0))
+        screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, 250))
+
+    def draw_entities(self):
+        self.player.draw()
+        self.bullet.draw()
+        for enemy in self.enemies:
+            enemy.draw()
 
     def draw(self):
         if self.state == PLAYING:
-            screen.blit(background, (0, 0))
-            self.player.draw()
-            self.enemy.draw()
-            self.bullet.draw()
+            self.draw_background()
+            self.draw_restart_text((600, 5))
+            self.draw_entities()
             self.draw_score()
+
         elif self.state == GAME_OVER:
             screen.fill((50, 0, 0))
-            game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
-            restart_text = font_restart.render("Press R to Restart", True, (255, 255, 255))
-            screen.blit(game_over_text, ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200))
-            screen.blit(restart_text, ((SCREEN_WIDTH - restart_text.get_width()) // 2, 300))
+            self.draw_game_over_text()
+            self.draw_restart_text((600, 621))
+            self.draw_score()
 
-    def draw_score(self):
-        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 255))
-        screen.blit(score_text, (10, 10))
+        elif self.state == PAUSED:
+            self.draw_background()
+            self.draw_entities()
+            self.draw_score()
+            self.draw_restart_text((600, 5))
+            self.draw_paused_text()
 
     def reset(self):
         self.__init__()
@@ -188,7 +221,10 @@ while running:
                     game.player.last_key = "right"
                 elif event.key == pygame.K_SPACE and game.bullet.state == "ready":
                     game.bullet.fire(game.player.x, game.player.y)
-
+                elif event.key == pygame.K_r:
+                    game.reset()
+                elif event.key == pygame.K_p:
+                    game.state = PAUSED
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT:
                     game.player.left_pressed = False
@@ -199,11 +235,20 @@ while running:
                     if game.player.last_key == "right":
                         game.player.last_key = "left" if game.player.left_pressed else None
 
+        elif game.state == PAUSED:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:
+                    game.state = PLAYING
+                elif event.key == pygame.K_r:
+                    game.reset()
+
         elif game.state == GAME_OVER:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 game.reset()
 
-    game.update(dt)
+    if game.state == PLAYING:
+        game.update(dt)
+
     game.draw()
     pygame.display.update()
 
