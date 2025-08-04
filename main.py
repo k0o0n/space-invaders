@@ -48,7 +48,7 @@ class Player:
         self.image = player_img
         self.x = (SCREEN_WIDTH - PLAYER_SIZE) // 2
         self.y = 480
-        self.speed = 0.5
+        self.speed = 0.55
         self.x_change = 0
         self.left_pressed = False
         self.right_pressed = False
