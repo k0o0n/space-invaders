@@ -43,7 +43,7 @@ class Player:
         self.image = player_img
         self.x = (SCREEN_WIDTH - PLAYER_SIZE) // 2
         self.y = 480
-        self.speed = 0.4
+        self.speed = 0.5
         self.x_change = 0
         self.left_pressed = False
         self.right_pressed = False
@@ -65,9 +65,9 @@ class Player:
 
 
 class Enemy:
-    def __init__(self):
+    def __init__(self, speed=0.3):
         self.image = enemy_img
-        self.speed = 0.3
+        self.speed = speed
         self.x = random.randint(0, SCREEN_WIDTH - ENEMY_SIZE)
         self.y = random.randint(50, 150)
         self.x_change = self.speed * random.choice([1, -1])
@@ -75,7 +75,13 @@ class Enemy:
 
     def update(self, dt):
         self.x += self.x_change * dt
-        if self.x <= 0 or self.x >= SCREEN_WIDTH - ENEMY_SIZE:
+        # Clamp and reverse direction when hitting edges, move down once
+        if self.x <= 0:
+            self.x = 0  # Clamp left edge
+            self.x_change *= -1
+            self.y += self.y_change
+        elif self.x >= SCREEN_WIDTH - ENEMY_SIZE:
+            self.x = SCREEN_WIDTH - ENEMY_SIZE  # Clamp right edge
             self.x_change *= -1
             self.y += self.y_change
 
@@ -83,7 +89,7 @@ class Enemy:
         screen.blit(self.image, (self.x, self.y))
 
     def reset(self):
-        self.__init__()
+        self.__init__(self.speed)
 
 
 class Bullet:
@@ -114,88 +120,100 @@ class Game:
     def __init__(self):
         self.player = Player()
         self.bullet = Bullet()
-        self.enemies = [Enemy(), Enemy()]
+        self.enemies = [Enemy()]
         self.state = PLAYING
         self.score = 0
 
     def check_collision(self, obj1_x, obj1_y, obj2_x, obj2_y, threshold):
-        distance = math.sqrt((obj1_x - obj2_x)**2 + (obj1_y - obj2_y)**2)
+        distance = math.sqrt((obj1_x - obj2_x) ** 2 + (obj1_y - obj2_y) ** 2)
         return distance < threshold
 
     def update(self, dt):
         if self.state == PLAYING:
             self.player.update(dt)
             self.bullet.update(dt)
-            for enemy in self.enemies:
-                enemy.update(dt)
+
+            # Increase speed by 0.02 per point
+            current_speed = 0.3 + 0.01 * self.score
+
+            # Add enemies based on score every 10 points
+            expected_enemy_count = 1 + (self.score // 10)
+            while len(self.enemies) < expected_enemy_count:
+                self.enemies.append(Enemy(speed=current_speed))
 
             for enemy in self.enemies:
-                if self.bullet.state == "fire" and self.check_collision(
-                    self.bullet.x + BULLET_SIZE // 2,
-                    self.bullet.y + BULLET_SIZE // 2,
-                    enemy.x + ENEMY_SIZE // 2,
-                    enemy.y + ENEMY_SIZE // 2,
-                    27):
+                enemy.speed = current_speed  # Update speed
+                enemy.x_change = current_speed * (1 if enemy.x_change > 0 else -1)
+                enemy.update(dt)
+
+            # Bullet-enemy collision
+            for enemy in self.enemies:
+                if (
+                    self.bullet.state == "fire"
+                    and self.check_collision(
+                        self.bullet.x + BULLET_SIZE // 2,
+                        self.bullet.y + BULLET_SIZE // 2,
+                        enemy.x + ENEMY_SIZE // 2,
+                        enemy.y + ENEMY_SIZE // 2,
+                        27,
+                    )
+                ):
                     self.bullet.state = "ready"
                     enemy.reset()
                     self.score += 1
                     break
 
+            # Enemy-player collision
             for enemy in self.enemies:
                 if self.check_collision(
                     self.player.x + PLAYER_SIZE // 2,
                     self.player.y + PLAYER_SIZE // 2,
                     enemy.x + ENEMY_SIZE // 2,
                     enemy.y + ENEMY_SIZE // 2,
-                    40):
+                    40,
+                ):
                     self.state = GAME_OVER
                     break
-
-    def draw_background(self):
-        screen.blit(background, (0, 0))
 
     def draw_restart_text(self, pos):
         x, y = pos
         restart_text = font_restart.render("Press R to Restart", True, (255, 255, 0))
         screen.blit(restart_text, (x, y))
 
-    def draw_score(self):
-        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 0))
-        screen.blit(score_text, (10, 10))
-
-    def draw_game_over_text(self):
-        game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
-        screen.blit(game_over_text, ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200))
-
-    def draw_paused_text(self):
-        pause_text = font_game_over.render("PAUSED", True, (255, 255, 0))
-        screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, 250))
-
-    def draw_entities(self):
-        self.player.draw()
-        self.bullet.draw()
-        for enemy in self.enemies:
-            enemy.draw()
-
     def draw(self):
         if self.state == PLAYING:
-            self.draw_background()
+            screen.blit(background, (0, 0))
             self.draw_restart_text((600, 5))
-            self.draw_entities()
+            self.player.draw()
+            self.bullet.draw()
+            for enemy in self.enemies:
+                enemy.draw()
             self.draw_score()
 
         elif self.state == GAME_OVER:
             screen.fill((50, 0, 0))
-            self.draw_game_over_text()
-            self.draw_restart_text((600, 621))
+            game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
+            screen.blit(
+                game_over_text,
+                ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200),
+            )
+            self.draw_restart_text((600, 5))
             self.draw_score()
 
         elif self.state == PAUSED:
-            self.draw_background()
-            self.draw_entities()
+            screen.blit(background, (0, 0))
+            self.player.draw()
+            self.bullet.draw()
+            for enemy in self.enemies:
+                enemy.draw()
             self.draw_score()
             self.draw_restart_text((600, 5))
-            self.draw_paused_text()
+            pause_text = font_game_over.render("PAUSED", True, (255, 255, 0))
+            screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, 250))
+
+    def draw_score(self):
+        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 0))
+        screen.blit(score_text, (10, 10))
 
     def reset(self):
         self.__init__()
@@ -229,11 +247,15 @@ while running:
                 if event.key == pygame.K_LEFT:
                     game.player.left_pressed = False
                     if game.player.last_key == "left":
-                        game.player.last_key = "right" if game.player.right_pressed else None
+                        game.player.last_key = (
+                            "right" if game.player.right_pressed else None
+                        )
                 elif event.key == pygame.K_RIGHT:
                     game.player.right_pressed = False
                     if game.player.last_key == "right":
-                        game.player.last_key = "left" if game.player.left_pressed else None
+                        game.player.last_key = (
+                            "left" if game.player.left_pressed else None
+                        )
 
         elif game.state == PAUSED:
             if event.type == pygame.KEYDOWN:
@@ -248,7 +270,6 @@ while running:
 
     if game.state == PLAYING:
         game.update(dt)
-
     game.draw()
     pygame.display.update()
 
