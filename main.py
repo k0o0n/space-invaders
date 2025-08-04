@@ -5,12 +5,17 @@ import math
 # Initialize pygame
 pygame.init()
 
+# Music
+my_sound = pygame.mixer.Sound('media/music.mp3')
+my_sound. play()
+
 # Constants
 SCREEN_WIDTH = 900
 SCREEN_HEIGHT = 600
 PLAYER_SIZE = 64
 ENEMY_SIZE = 64
 BULLET_SIZE = 32
+TEXT_COLOR = (180, 0, 130)
 
 # Screen setup
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -25,9 +30,9 @@ enemy_img = pygame.image.load("media/enemy.png")
 bullet_img = pygame.image.load("media/bullet.png")
 
 # Fonts
-font_game_over = pygame.font.SysFont("comicsansms", 64)
-font_restart = pygame.font.SysFont("comicsansms", 32)
-font_score = pygame.font.SysFont("comicsansms", 28)
+font_game_over = pygame.font.SysFont("comicsansms", 64, bold=True)
+font_restart = pygame.font.SysFont("comicsansms", 32, bold=True)
+font_score = pygame.font.SysFont("comicsansms", 28, bold=True)
 
 # Clock
 clock = pygame.time.Clock()
@@ -75,21 +80,20 @@ class Enemy:
 
     def update(self, dt):
         self.x += self.x_change * dt
-        # Clamp and reverse direction when hitting edges, move down once
         if self.x <= 0:
-            self.x = 0  # Clamp left edge
+            self.x = 0
             self.x_change *= -1
             self.y += self.y_change
         elif self.x >= SCREEN_WIDTH - ENEMY_SIZE:
-            self.x = SCREEN_WIDTH - ENEMY_SIZE  # Clamp right edge
+            self.x = SCREEN_WIDTH - ENEMY_SIZE
             self.x_change *= -1
             self.y += self.y_change
 
     def draw(self):
         screen.blit(self.image, (self.x, self.y))
 
-    def reset(self):
-        self.__init__(self.speed)
+    def reset(self, speed):
+        self.__init__(speed=speed)
 
 
 class Bullet:
@@ -123,6 +127,8 @@ class Game:
         self.enemies = [Enemy()]
         self.state = PLAYING
         self.score = 0
+        self.base_speed = 0.3
+        self.speed_increment = 0.01
 
     def check_collision(self, obj1_x, obj1_y, obj2_x, obj2_y, threshold):
         distance = math.sqrt((obj1_x - obj2_x) ** 2 + (obj1_y - obj2_y) ** 2)
@@ -132,72 +138,78 @@ class Game:
         if self.state == PLAYING:
             self.player.update(dt)
             self.bullet.update(dt)
-
-            # Increase speed by 0.02 per point
-            current_speed = 0.3 + 0.01 * self.score
-
-            # Add enemies based on score every 10 points
-            expected_enemy_count = 1 + (self.score // 10)
-            while len(self.enemies) < expected_enemy_count:
-                self.enemies.append(Enemy(speed=current_speed))
+            current_speed = self.base_speed + (self.score * self.speed_increment)
 
             for enemy in self.enemies:
-                enemy.speed = current_speed  # Update speed
-                enemy.x_change = current_speed * (1 if enemy.x_change > 0 else -1)
                 enemy.update(dt)
 
-            # Bullet-enemy collision
             for enemy in self.enemies:
-                if (
-                    self.bullet.state == "fire"
-                    and self.check_collision(
+                if self.bullet.state == "fire" and self.check_collision(
                         self.bullet.x + BULLET_SIZE // 2,
                         self.bullet.y + BULLET_SIZE // 2,
                         enemy.x + ENEMY_SIZE // 2,
                         enemy.y + ENEMY_SIZE // 2,
-                        27,
-                    )
-                ):
+                        27):
                     self.bullet.state = "ready"
-                    enemy.reset()
+                    enemy.reset(speed=current_speed)
                     self.score += 1
                     break
 
-            # Enemy-player collision
             for enemy in self.enemies:
                 if self.check_collision(
-                    self.player.x + PLAYER_SIZE // 2,
-                    self.player.y + PLAYER_SIZE // 2,
-                    enemy.x + ENEMY_SIZE // 2,
-                    enemy.y + ENEMY_SIZE // 2,
-                    40,
-                ):
+                        self.player.x + PLAYER_SIZE // 2,
+                        self.player.y + PLAYER_SIZE // 2,
+                        enemy.x + ENEMY_SIZE // 2,
+                        enemy.y + ENEMY_SIZE // 2,
+                        40):
                     self.state = GAME_OVER
                     break
 
-    def draw_restart_text(self, pos):
-        x, y = pos
-        restart_text = font_restart.render("Press R to Restart", True, (255, 255, 0))
-        screen.blit(restart_text, (x, y))
+            expected_enemy_count = 1 + (self.score // 10)
+            if len(self.enemies) < expected_enemy_count:
+                self.enemies.append(Enemy(speed=current_speed))
+
+    def draw_info_text(self, text, pos, font=font_restart, color=TEXT_COLOR):
+        rendered = font.render(text, True, color)
+        screen.blit(rendered, pos)
+
+    def draw_pause_info(self):
+        lines = [
+            "Controls:",
+            "Left / Right: Move",
+            "Space: Shoot",
+            "P: Resume",
+            "R: Restart",
+            "",
+            "Mechanics:",
+            "Enemy speed increases every 1 point",
+            "New enemy spawns every 10 points"
+        ]
+        y_offset = 150
+        for line in lines:
+            text_surface = font_score.render(line, True, TEXT_COLOR)
+            screen.blit(text_surface, (SCREEN_WIDTH // 2 - text_surface.get_width() // 2, y_offset))
+            y_offset += 30
+
+    def draw_score(self):
+        score_text = font_score.render(f"Score: {self.score}", True, TEXT_COLOR)
+        screen.blit(score_text, (10, 10))
 
     def draw(self):
         if self.state == PLAYING:
             screen.blit(background, (0, 0))
-            self.draw_restart_text((600, 5))
             self.player.draw()
             self.bullet.draw()
             for enemy in self.enemies:
                 enemy.draw()
             self.draw_score()
+            self.draw_info_text("Press P to Pause", (SCREEN_WIDTH - 270, 5))
 
         elif self.state == GAME_OVER:
             screen.fill((50, 0, 0))
-            game_over_text = font_game_over.render("GAME OVER", True, (255, 255, 255))
-            screen.blit(
-                game_over_text,
-                ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200),
-            )
-            self.draw_restart_text((600, 5))
+            game_over_text = font_game_over.render("GAME OVER", True, TEXT_COLOR)
+            screen.blit(game_over_text, ((SCREEN_WIDTH - game_over_text.get_width()) // 2, 200))
+            self.draw_info_text("Press R to Restart", (SCREEN_WIDTH // 2 - 150, 400))
             self.draw_score()
 
         elif self.state == PAUSED:
@@ -207,13 +219,10 @@ class Game:
             for enemy in self.enemies:
                 enemy.draw()
             self.draw_score()
-            self.draw_restart_text((600, 5))
-            pause_text = font_game_over.render("PAUSED", True, (255, 255, 0))
-            screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, 250))
-
-    def draw_score(self):
-        score_text = font_score.render(f"Score: {self.score}", True, (255, 255, 0))
-        screen.blit(score_text, (10, 10))
+            self.draw_info_text("Press P to Pause", (SCREEN_WIDTH - 270, 5))
+            pause_text = font_game_over.render("PAUSED", True, TEXT_COLOR)
+            screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, 80))
+            self.draw_pause_info()
 
     def reset(self):
         self.__init__()
@@ -247,15 +256,11 @@ while running:
                 if event.key == pygame.K_LEFT:
                     game.player.left_pressed = False
                     if game.player.last_key == "left":
-                        game.player.last_key = (
-                            "right" if game.player.right_pressed else None
-                        )
+                        game.player.last_key = "right" if game.player.right_pressed else None
                 elif event.key == pygame.K_RIGHT:
                     game.player.right_pressed = False
                     if game.player.last_key == "right":
-                        game.player.last_key = (
-                            "left" if game.player.left_pressed else None
-                        )
+                        game.player.last_key = "left" if game.player.left_pressed else None
 
         elif game.state == PAUSED:
             if event.type == pygame.KEYDOWN:
@@ -270,6 +275,7 @@ while running:
 
     if game.state == PLAYING:
         game.update(dt)
+
     game.draw()
     pygame.display.update()
 
