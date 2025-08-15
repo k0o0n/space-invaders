@@ -2,5 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/archives" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/web/archives" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/web/space_invaders/archives" vcs="Git" />
   </component>
 </project>

@@ -2,13 +2,37 @@ import pygame
 import random
 import math
 import asyncio
+import sys
+from pathlib import Path
+
+print("Platform:", sys.platform)
+print("Files in /data/assets:", list(Path("/data/assets").glob("*")))
 
 # ================= Initialize Pygame =================
-pygame.init()
+pygame.display.init()
+pygame.font.init()
+#pygame.init()
+
+# ================= Assets Path =================
+if __name__ == "__main__":
+    if sys.platform in ["emscripten"]:  # browser
+        ASSETS = Path("/assets")
+    else:  # desktop
+        ASSETS = Path(__file__).with_name("assets")
+
+def load_image(filename, alpha=True):
+    """Load an image from the assets folder."""
+    path = ASSETS / filename
+    img = pygame.image.load(str(path))
+    return img.convert_alpha() if alpha else img.convert()
+
+#def load_sound(filename):
+#    """Load a sound from the assets folder."""
+#    return pygame.mixer.Sound(str(ASSETS / filename))
 
 # ================= Music =================
-my_sound = pygame.mixer.Sound('media/music.mp3')
-my_sound.play(-1)
+#my_sound = load_sound("music.mp3")
+#my_sound.play(-1)
 
 # ================= Base screen & scaling =================
 BASE_SCREEN_WIDTH = 900
@@ -27,14 +51,14 @@ TEXT_BORDER_COLOR = (255, 255, 255)
 # ================= Screen Setup =================
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Space Invaders")
-icon = pygame.image.load("media/ufo.png")
+icon = load_image("ufo.png")
 pygame.display.set_icon(icon)
 
 # ================= Load Assets =================
-background_img_orig = pygame.image.load("media/background.png")
-player_img_orig = pygame.image.load("media/player.png")
-enemy_img_orig = pygame.image.load("media/enemy.png")
-bullet_img_orig = pygame.image.load("media/bullet.png")
+background_img_orig = load_image("background.png", alpha=False)
+player_img_orig = load_image("player.png")
+enemy_img_orig = load_image("enemy.png")
+bullet_img_orig = load_image("bullet.png")
 
 # ================= Fonts =================
 font_game_over = pygame.font.SysFont("comicsansms", 64, bold=True)
@@ -176,13 +200,11 @@ class Game:
         self.shoot_cooldown = 200  # milliseconds
         self.last_shot_time = 0
 
-    # ----- Collision Check -----
     def check_collision(self, obj1_x, obj1_y, obj2_x, obj2_y, threshold_base):
         scale_factor = (SCREEN_WIDTH + SCREEN_HEIGHT) / (BASE_SCREEN_WIDTH + BASE_SCREEN_HEIGHT)
         distance = math.sqrt((obj1_x - obj2_x) ** 2 + (obj1_y - obj2_y) ** 2)
         return distance < threshold_base * scale_factor
 
-    # ----- Update Logic -----
     def update(self, dt):
         if self.state != PLAYING:
             return
@@ -191,11 +213,9 @@ class Game:
         self.bullet.update(dt)
         current_speed = self.base_speed + (self.score * self.speed_increment)
 
-        # Update enemies
         for enemy in self.enemies:
             enemy.update(dt)
 
-        # Bullet collision
         for enemy in self.enemies:
             if self.bullet.state == "fire" and self.check_collision(
                     self.bullet.x + self.bullet.size / 2,
@@ -208,7 +228,6 @@ class Game:
                 self.score += 1
                 break
 
-        # Player collision
         for enemy in self.enemies:
             if self.check_collision(
                     self.player.x + self.player.size / 2,
@@ -219,12 +238,10 @@ class Game:
                 self.state = GAME_OVER
                 break
 
-        # Spawn new enemies every 10 points
         expected_enemy_count = 1 + (self.score // 10)
         while len(self.enemies) < expected_enemy_count:
             self.enemies.append(Enemy(speed=current_speed))
 
-    # ----- Continuous Shooting -----
     def handle_continuous_shooting(self):
         if self.player.shoot_pressed:
             now = pygame.time.get_ticks()
@@ -232,10 +249,8 @@ class Game:
                 self.bullet.fire(self.player.x, self.player.y)
                 self.last_shot_time = now
 
-    # ----- Draw Helpers -----
     def draw_info_text(self, text, pos, font=font_restart, color=TEXT_COLOR):
         text_surface = render_text_with_border(text, font, color, TEXT_BORDER_COLOR)
-        # Ensure it fits in screen
         x = min(pos[0], SCREEN_WIDTH - text_surface.get_width() - 10)
         y = min(pos[1], SCREEN_HEIGHT - text_surface.get_height() - 10)
         screen.blit(text_surface, (x, y))
@@ -264,7 +279,6 @@ class Game:
         score_text = render_text_with_border(f"Score: {self.score}", font_score, TEXT_COLOR, TEXT_BORDER_COLOR)
         screen.blit(score_text, (10, 10))
 
-    # ----- Draw States -----
     def draw_background(self):
         screen.blit(self.scaled_background, (0, 0))
 
@@ -289,7 +303,6 @@ class Game:
         screen.blit(pause_text, ((SCREEN_WIDTH - pause_text.get_width()) // 2, int(SCREEN_HEIGHT * 0.1)))
         self.draw_pause_info()
 
-    # ----- Main Draw -----
     def draw(self):
         self.draw_background()
         if self.state == PLAYING:
@@ -299,7 +312,6 @@ class Game:
         elif self.state == PAUSED:
             self.draw_paused_state()
 
-    # ----- Reset Game -----
     def reset(self):
         self.score = 0
         self.state = PLAYING
@@ -311,7 +323,6 @@ class Game:
         self.enemies = [Enemy()]
         self.scaled_background = scale_image(background_img_orig, SCREEN_WIDTH, SCREEN_HEIGHT)
 
-    # ----- Rescale on Window Resize -----
     def rescale_objects(self):
         self.player.update_scaled()
         self.bullet.update_scaled()
@@ -321,7 +332,7 @@ class Game:
 
 # ================= Main Loop =================
 async def main():
-    global SCREEN_WIDTH, SCREEN_HEIGHT
+    global SCREEN_WIDTH, SCREEN_HEIGHT, screen
     game = Game()
     running = True
     while running:
@@ -341,8 +352,6 @@ async def main():
                 elif event.key == pygame.K_p:
                     if game.state == PLAYING:
                         game.state = PAUSED
-                    elif game.state == PAUSED:
-                        game
                     elif game.state == PAUSED:
                         game.state = PLAYING
                 elif event.key == pygame.K_r:
