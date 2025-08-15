@@ -377,4 +377,9 @@ async def main():
 
 # ================= Run Game =================
 if __name__ == "__main__":
-    asyncio.run(main())
+    if sys.platform == "emscripten":
+        import emscripten
+        asyncio.ensure_future(main())
+        emscripten.run_forever(asyncio.get_event_loop().run_forever)
+    else:
+        asyncio.run(main())
